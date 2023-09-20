@@ -1,0 +1,3915 @@
+---
+title: "kruskall attitudes 200923"
+author: "Ian Philips"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning = FALSE,message = FALSE)
+
+```
+
+
+
+```{r datasetup,include=FALSE,message = FALSE,echo=FALSE}
+
+require(tidyverse)
+library(readxl)
+
+library(knitr)
+require(flextable)
+require(viridis)
+require(hrbrthemes)
+
+require(rlang) # for !!sym()
+require(HH) ##likert plot
+require(descr)#produce a xtab
+require(data.table)
+
+
+#library(tidyverse)      # for data wrangling and visualization
+#library(broom)          # for tidy test output
+#library(ggpubr)         # for QQplot
+#install.packages("conover.test")
+#library(conover.test)   # for conover test
+
+
+
+
+#dots to go up a directory from scripts to the r.proj dir
+waves <- read_csv("../both_survey_waves_responses.csv")
+dat_20 <- read_csv("../data2020_wrangled2021.csv")
+dat_21 <- read_csv("../data2021.csv")
+
+
+#question text and q number look ups
+t_qtext_20 <- read_csv("../t_qtext_20.csv")
+t_qtext_21 <- read_csv("../t_qtext_21.csv") 
+
+
+#lookup table used to make comparisons between years 
+lookup <- read_csv("../lookup_between_year_comparisons.csv") %>% filter(!is.na(comparison))
+
+```
+
+
+
+
+```{r}
+#rename segments to remove hyphens  
+
+dat_21$segment21[dat_21$segment21== "res_owner21"] <- "Resident ebike owner 21"
+dat_21$segment21[dat_21$segment21== "visitor_ebike21"] <- "Visitor ebike owner 21"
+dat_21$segment21[dat_21$segment21== "hirer21"] <- "Hirer 21"
+dat_21$segment21[dat_21$segment21== "visitor_non_ebike21"] <- "Visitor non ebike 21"
+dat_21$segment21[dat_21$segment21== "res_non_ebike21"] <- "Resident non ebike 21"
+
+
+dat_20$segment[dat_20$segment== "hirer20"] <- "Hirer 20" 
+dat_20$segment[dat_20$segment== "res_non_ebike20"] <- "Resident non ebike 20" 
+dat_20$segment[dat_20$segment== "res_owner20"] <- "Resident ebike owner 20" 
+dat_20$segment[dat_20$segment== "visitor_ebike20"] <- "Visitor ebike owner 20" 
+dat_20$segment[dat_20$segment== "visitor_non_ebike20"] <- "Visitor non ebike 20" 
+
+waves$segment21[waves$segment21== "res_owner21"] <- "Resident ebike owner 21"
+waves$segment21[waves$segment21== "visitor_ebike21"] <- "Visitor ebike owner 21"
+waves$segment21[waves$segment21== "hirer21"] <- "Hirer 21"
+waves$segment21[waves$segment21== "visitor_non_ebike21"] <- "Visitor non ebike 21"
+waves$segment21[waves$segment21== "res_non_ebike21"] <- "Resident non ebike 21"
+
+waves$segment[waves$segment== "hirer20"] <- "Hirer 20" 
+waves$segment[waves$segment== "res_non_ebike20"] <- "Resident non ebike 20" 
+waves$segment[waves$segment== "res_owner20"] <- "Resident ebike owner 20" 
+waves$segment[waves$segment== "visitor_ebike20"] <- "Visitor ebike owner 20" 
+waves$segment[waves$segment== "visitor_non_ebike20"] <- "Visitor non ebike 20" 
+
+
+```
+
+
+
+
+
+
+
+```{r}
+
+################# FUNCTIONS ######################
+
+
+#-----builds a long format dataframe with columns segment chr, opinion ordered factor and likert integer of factor level
+opiniondf <- function(opinion_var = "Q19_2021_c_lickert_safety",
+                            raw_var = "Q19_2021_c",
+                            segment_var = "segment21",
+                            segs = c("Resident ebike owner 21","Visitor ebike owner 21","Hirer 21"),
+                            data_to_use = dat_21
+                            ){
+
+  require(rlang)
+
+    #testing
+ # opinion_var = "Q45_2021_e"
+ # raw_var = "Q45_2021_e"
+ # segment_var = "segment21"
+ # segs = c("Resident ebike owner 21","Visitor ebike owner 21","Hirer 21","Resident non ebike 21", "Visitor non ebike 21")
+ # data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+ # ct_opinion_name = "safety"
+ #  plot_title = "TESTING "
+ #                           print_the_ct = FALSE
+
+  
+ #makes a variaqble that we are going to tun into the "opinion variable"
+  data_to_use <-  data_to_use %>% mutate(!!sym(opinion_var) := !!sym(raw_var))
+ 
+ #assign dont know and na to neutral 
+  data_to_use = data_to_use %>% 
+    mutate(!!sym(opinion_var) := case_when(!!sym(opinion_var) == "don't know"  ~ "neutral",
+                                           is.na(!!sym(opinion_var)) ~ "neutral",
+                                           !!sym(opinion_var) == "strongly disagree" ~"strongly disagree",
+                                           !!sym(opinion_var) == "disagree" ~"disagree",
+                                           !!sym(opinion_var) == "neutral" ~"neutral",
+                                           !!sym(opinion_var) ==  "agree"~ "agree",
+                                           !!sym(opinion_var) == "strongly agree" ~ "strongly agree")
+           
+    )
+  
+  #subset the dataframe to just keep segment and opinion
+  temp <- data_to_use %>%
+    #filter(segment21 == "Resident ebike owner 21" | segment21 =="Visitor ebike owner 21"| segment21 =="Hirer 21") %>%
+    filter(!!sym(segment_var) %in% segs) %>%
+    #dplyr::select(segment = segment21, opinion =  Q19_2021_c_lickert_safety)
+    dplyr::select(segment := !!sym(segment_var), opinion :=  !!sym(opinion_var))
+  
+  #glimpse(data_to_use)
+  #make an ordered factor 
+  temp = temp %>% 
+    mutate(opinion  = factor(opinion,levels =  c("strongly disagree",
+                                                                       "disagree",
+                                                                       "neutral",
+                                                                       "agree",
+                                                                       "strongly agree")
+    )
+    )
+
+  #make a numeric value for the factor level 
+  temp$likert <- as.integer(temp$opinion)
+  
+  return(temp)
+  
+}
+ 
+##################### functions  200823 ############################## 
+
+#takes the long format opinion dataframe (with columns segment and opinion) and produces a likert plot 
+likert_from_opinion <- function(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = "Riding an e-bike on the road in the\n Lake District feels safe most of the time"){
+  
+  
+  #testing
+  # input_long_df  = b
+  # ct_opinion_name = ct.opinion.name
+  # set_ref_zero =3
+  # x_axis_percent = TRUE
+  # plot_title = "Riding an e-bike on the road in the\n Lake District feels safe most of the time"
+
+  
+  input_long_df$opinion <-  as.character(input_long_df$opinion)
+  
+  
+  # tally number of responses at each level
+  temp3 <- input_long_df %>% group_by(segment,opinion) %>% tally() 
+  #make into wide format
+  temp3 <- temp3 %>%  pivot_wider(id_cols = "segment",
+                                  names_from = "opinion", 
+                                  values_from = "n"
+                                  
+  )
+  
+    #replace any na with 0 a count of no individuals with a particular 
+  #likert score
+  temp3 <- temp3 %>% replace(is.na(.), 0)
+ #if there is an opinion category missing then sort it out
+ temp3 <- temp3 %>% dplyr::select(any_of(
+    c("segment","strongly disagree","disagree","neutral","agree","strongly agree")
+                                         )
+                                   )
+  
+   #code to place 0 if there is a missing column
+   if(!("strongly disagree" %in% colnames(temp3))){
+  temp3$'strongly disagree' <- 0
+  }
+   
+   if(!("disagree" %in% colnames(temp3))){
+  temp3$disagree <- 0
+  }
+  
+   if(!("neutral" %in% colnames(temp3))){
+  temp3$neutral <- 0
+  }
+   
+   if(!("agree" %in% colnames(temp3))){
+  temp3$'agree' <- 0
+  }
+   
+   if(!("strongly agree" %in% colnames(temp3))){
+  temp3$'strongly agree' <- 0
+  }
+   
+   
+   
+   #reorder columns
+   temp3 <- temp3 %>% dplyr::select(
+    c(segment,`strongly disagree`,disagree,neutral,agree,`strongly agree`)
+                                    )
+   
+  #make the Likert plot 
+  lp <- likert(segment~.,temp3,
+               ylab = "segment",xlab = "Percentage of respondents",
+               as.percent = x_axis_percent,
+               main=list(plot_title,cex=0.8),
+               ReferenceZero=set_ref_zero,
+               auto.key = list(columns = 2),
+               rightAxis = FALSE #don't show the row count totals on the right 
+               )
+  
+  
+  lp
+
+}
+
+
+##### ----------- Kruskal function  --------------- 
+#performs kruskal wallis #dunn post hoc test too 
+
+
+kruskal_func <- function(input_long_df  = a){
+  
+  #testing
+  #input_long_df  = a
+  
+  #H0 - null hypothesis: all samples are the same
+  #Halt - alternative hypothesis: at least one sample differs from at least one other
+
+
+  kt <- kruskal.test(segment ~ likert, data =  input_long_df)
+  
+ 
+  # first_table <- input_long_df %>%
+  #   mutate(rank = rank(likert)) %>%   # mutate means - create new column
+  #   group_by(segment) %>%
+  #   summarise(rank_sum  = sum(rank),
+  #             rank_mean = mean(rank),
+  #             mean_likert = mean(likert),
+  #             median_likert = median(likert),
+  #             n         = n() )
+  
+
+#-- Post hoc test ----   
+ 
+
+dunn_out <- FSA::dunnTest(likert ~ segment,
+              data = input_long_df,
+              method="bh") 
+
+dunn_out <- as.data.frame(dunn_out[["res"]]) # %>% filter(P.adj < 0.05)
+dunn_out <- dunn_out %>%  filter(P.adj < 0.05)
+
+to_output <- list(kt,dunn_out)  
+return(to_output)
+
+}
+
+
+#### ---- compare same segment 2 years x section  ----------- 
+
+#compares 1 segment in 2 different years.  
+#we can uyse the same code R will see that there are only 2 groups and
+#run the appropriate test 
+compare_segs_across_years <- function(input_long_df  = a,
+                                      seg20,seg21
+                                      ){
+  
+  #testing
+  # input_long_df  = a 
+  # seg20 <- "female_Hirer 20"
+  # seg21 <- "female_Hirer 21" 
+  
+  
+  temp4 <-input_long_df %>%
+    filter(segment == seg20|segment ==seg21)
+  
+  #H0 - null hypothesis: all samples are the same
+  #Halt - alternative hypothesis: at least one sample differs from at least one other
+
+
+  kt <- kruskal.test(segment ~ likert, data =  temp4)
+  
+  out_df <- data.frame(segment2020  = c(seg20),
+                       segment2021 = c(seg21),
+                       pvalue = kt$p.value)
+  out_df <- out_df %>% filter(pvalue <=0.05)
+ 
+ return(out_df)
+
+  
+  }
+
+
+
+## ------ compare_segs_across_years_lookup using a look up to run several comparisons 
+compare_segs_across_years_lookup <- function(df = a,
+                                             lookup_table = lookup,
+                                             to_compare = lookup$comparison#c("female_hirer","male_hirer")
+                                             ){
+ 
+  #testing
+   # df = a
+   # #to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike")
+   # to_compare = c("male_res_owner")
+   # lookup_table = lookup
+  
+  #filter to keep only the comparisions being run
+  lu <- lookup_table %>% filter(comparison %in% to_compare)
+
+  #make empty list
+  compare_results <- list()  #initialize empty list
+    
+  #loop through the rows in lu 
+  for(i in 1:nrow(lu)){
+    #print(i)
+  
+    
+    x <- compare_segs_across_years(input_long_df = df,
+                              seg20 = lu$seg20[i],
+                              seg21 = lu$seg21[i]
+                              )
+    compare_results[[length( compare_results)+1]] <- x
+  }
+
+   #convert the list into a dataframe
+    compare_results <- plyr::ldply(compare_results, data.frame)
+    return(compare_results)
+}
+
+
+
+#function that produces the net scores in likert tables 
+#net being the difference in percent between some level 
+#of agreement vs some level of disagreement
+net_agreement <- function(inputdf,dopercent=TRUE){
+  
+  #testing
+  #inputdf = a
+    
+    widea <- inputdf %>% group_by(segment,opinion) %>% tally() 
+    
+    widea <- widea %>%  pivot_wider(id_cols = "segment",
+                                    names_from = "opinion", 
+                                    values_from = "n"
+                                    
+    )
+  
+    widea <- widea %>% replace(is.na(.), 0)
+   
+  
+  ##Next convert counts to %
+  if(dopercent ==TRUE){
+  widea$SUMCOL <- rowSums(widea[sapply(widea, is.numeric)], na.rm = TRUE)
+  
+  widea$`strongly disagree` = round(100*(widea$`strongly disagree`/widea$SUMCOL),0)
+  widea$disagree = round(100*(widea$disagree/widea$SUMCOL),0)
+  
+  widea$`strongly agree` = round(100*(widea$`strongly agree`/widea$SUMCOL),0)
+  widea$agree = round(100*(widea$agree/widea$SUMCOL),0)
+  widea$neutral = round(100*(widea$neutral/widea$SUMCOL),0)
+  
+  widea$`net percent` <- round((
+    (widea$agree +widea$`strongly agree`)-(widea$disagree +widea$`strongly disagree`)
+  ),0)
+  
+  }
+  
+  return(widea)
+ 
+}
+
+
+#### 
+
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+#wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+
+wilcox_paired_waves <- function(df = waves,
+                                raw_var21 = raw.var21,
+                                raw_var20 = raw.var20
+){
+
+
+
+
+  ##TESTING
+  # df = waves
+  # raw.var21 = "Q45_2021_a"
+  # raw.var20 = "Q43a"
+  # raw_var20 = raw.var20
+  # raw_var21 = raw.var21
+  
+
+  data_to_use <- df %>% dplyr::select(segment21,segment, !!raw_var20,!!raw_var21, Q47_2021)
+  data_to_use$segment21 <- paste0(data_to_use$Q47_2021, " ", data_to_use$segment21)
+  data_to_use$segment <- paste0(data_to_use$Q47_2021, " ", data_to_use$segment)
+  
+#       data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+#a21f$segment <- paste0("Female ",a21f$segment)
+
+  
+  
+
+  #assign dont know and na to neutral
+  data_to_use = data_to_use %>%
+    mutate(!!sym(raw_var20) := case_when(!!sym(raw_var20) == "don't know"  ~ "neutral",
+                                         is.na(!!sym(raw_var20)) ~ "neutral",
+                                         !!sym(raw_var20) == "strongly disagree" ~"strongly disagree",
+                                         !!sym(raw_var20) == "disagree" ~"disagree",
+                                         !!sym(raw_var20) == "neutral" ~"neutral",
+                                         !!sym(raw_var20) ==  "agree"~ "agree",
+                                         !!sym(raw_var20) == "strongly agree" ~ "strongly agree")
+
+    )
+
+
+  data_to_use = data_to_use %>%
+    mutate(!!sym(raw_var21) := case_when(!!sym(raw_var21) == "don't know"  ~ "neutral",
+                                         is.na(!!sym(raw_var21)) ~ "neutral",
+                                         !!sym(raw_var21) == "strongly disagree" ~"strongly disagree",
+                                         !!sym(raw_var21) == "disagree" ~"disagree",
+                                         !!sym(raw_var21) == "neutral" ~"neutral",
+                                         !!sym(raw_var21) ==  "agree"~ "agree",
+                                         !!sym(raw_var21) == "strongly agree" ~ "strongly agree")
+
+    )
+
+
+
+  data_to_use = data_to_use %>% dplyr::select(segment21, segment20 = segment, opinion20 :=  !!sym(raw_var20),opinion21 :=  !!sym(raw_var21))
+
+  #glimpse(data_to_use)
+
+  #filter out any nas
+  data_to_use = data_to_use[complete.cases(data_to_use),]
+
+  #there are some panel respondents who were in a different segment in 2021 to 2020
+  #e.g.  a person was a hirer in 2021 but in 2020 they visitied and didn't use an e-bike
+  #or a person was a non-ebike owner in
+  data_to_use$segment20 = paste0(data_to_use$segment21,"_20")
+
+
+
+  #make a likert number for 2020 and 2021 opinions
+  data_to_use = data_to_use%>%
+    mutate(opinion21  = factor(opinion21,levels =  c("strongly disagree",
+                                                     "disagree",
+                                                     "neutral",
+                                                     "agree",
+                                                     "strongly agree")
+    )
+    )
+
+  #make a numeric value for the factor level
+  data_to_use$likert21 <- as.integer(data_to_use$opinion21)
+
+
+  data_to_use = data_to_use%>%
+    mutate(opinion20  = factor(opinion20,levels =  c("strongly disagree",
+                                                     "disagree",
+                                                     "neutral",
+                                                     "agree",
+                                                     "strongly agree")
+    )
+    )
+
+  #make a numeric value for the factor level
+  data_to_use$likert20 <- as.integer(data_to_use$opinion20)
+
+
+
+
+  #find all the segments in the waves data
+  segments = data_to_use %>% group_by(segment21) %>% tally() %>% filter(!is.na(segment21))
+  segment_var = segments$segment21 #makes a vector
+
+
+  wt_results <- list()
+
+
+
+  #this will be a loop
+  for(i in 1:length(segment_var)){
+
+
+    #subset the dataframe to just keep segment and opinion
+    temp <- data_to_use %>%
+      filter(segment21 == segment_var[i])
+    #%>%
+    #  dplyr::select(segment = segment21, opinion20 :=  !!sym(raw_var20),opinion21 :=  !!sym(raw_var21))
+    #glimpse(temp)
+
+
+    #make into long form
+    temp2  <- temp %>% dplyr::select(seg = segment21, likert =likert21 )
+    temp3 <- temp %>% dplyr::select(seg = segment20, likert =likert20 )
+
+    temp4 <- rbind(temp2,temp3)
+
+    #run the  two-samples paired Wilcoxon signed rank test  e.g. https://yury-zablotski.netlify.app/post/two-samples-wilcoxon-test/
+    wt_l <- wilcox.test(data = temp4, likert~seg, paired = T, alternative = "less", conf.int = T, exact = F) %>% broom::tidy()
+    wt_g <- wilcox.test(data = temp4, likert ~ seg, paired = T, alternative = "greater", conf.int = T, exact = F) %>% broom::tidy()
+
+    wt <- rbind(wt_l,wt_g)
+    wt$segment <- segment_var[i]
+
+    #add results to list
+    wt_results[[length(wt_results)+1]] <- wt
+
+  }
+
+
+  wt_results <- plyr::ldply(wt_results, data.frame)
+  wt_results <- wt_results %>% filter(p.value < 0.05)
+  regulartable(wt_results)
+
+}
+
+
+
+
+
+```
+
+```{r}
+###############################################################
+######### ANALYSIS STARTS FROM HERE ###########################
+###############################################################
+```
+
+
+
+# Attitudes: GENERAL 
+
+## "After Covid, transport and tourism should be greener"
+
+
+
+```{r}
+#name stuff 
+
+raw.var21 = "Q45_2021_a"
+opinion.var21  = "Q45_2021_a"
+raw.var20 = "Q43a" 
+opinion.var20  = "Q43a"
+ct.opinion.name  = "opinion"
+plot.title = "After Covid, transport and tourism should be greener(cross section)"
+
+#check <- dat_20 %>% dplyr::select(segment,Q43a) 
+
+```
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+
+## nb this runs on 2020 and 2021 data so mainly to test that code runs. 
+#for comparisons use B and C 
+# that way the comparison is 2020 segments with each other  (b) 
+# then 2020 segments with each other (c)
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "After Covid, transport and tourism should be greener\n(panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+
+
+
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+################## more beautiful ##########
+```
+
+
+
+## "The Lake District national park would be more beautiful if\n more people travelled by bike or e-bike\n and fewer people travelled by car/van"
+
+
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_b"
+opinion.var21  = "Q45_2021_b"
+raw.var20 = "Q43b"
+opinion.var20  = "Q43b"
+ct.opinion.name  = "opinion"
+plot.title = "The Lake District national park would be more beautiful if\n more people travelled by bike or e-bike\n and fewer people travelled by car/van (cross section)"
+
+
+```
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "The Lake District national park would be more beautiful if\n more people travelled by bike or e-bike\n and fewer people travelled by car/van (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+######################    e-bikes are a good way to replace some car journeys                  ################
+```
+
+
+
+# e-bikes are a good way to replace some car journeys
+
+
+ 
+
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_d"
+opinion.var21  = "Q45_2021_d"
+raw.var20 = "Q43d"
+opinion.var20  = "Q43d"
+ct.opinion.name  = "opinion"
+plot.title = "e-bikes are a good way to replace some car journeys (cross section)"
+
+
+
+
+
+```
+
+
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "e-bikes are a good way to replace some car journeys (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+#################### personal aspiration ######################### 
+```
+
+# Personal aspiration around potential behaviour change
+
+
+
+##  I would like to travel by car less in the Lake District
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_e"
+opinion.var21  = "Q45_2021_e"
+raw.var20 = "Q43e"
+opinion.var20  = "Q43e"
+ct.opinion.name  = "opinion"
+plot.title = "I would like to travel by car less in the Lake District (cross section)"
+
+
+#check <- dat_21 %>% dplyr::select(segment21,Q45_2021_e,Q47_2021) 
+
+```
+
+
+
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "I would like to travel by car less in the Lake District (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                  #         "Visitor ebike owner 21"),
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                            "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21","Resident ebike owner 21",
+                   #        "Visitor ebike owner 21"),
+                            data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20","Visitor ebike owner 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+################# would consider using PT to visit ############################
+```
+
+
+
+##  I would consider visiting the Lake District without a car if public transport were improved between my home ant the Lake District
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_f"
+opinion.var21  = "Q45_2021_f"
+raw.var20 = "Q43f"
+opinion.var20  = "Q43f"
+ct.opinion.name  = "opinion"
+plot.title = "I would consider visiting the Lake District without a car\n if public transport were improved\n between my home and the Lake District (cross section)"
+
+#check <- dat_21 %>% dplyr::select(segment21,Q45_2021_e,Q47_2021)
+
+```
+
+ 
+
+
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  # segs = c("Hirer 21","Resident ebike owner 21",
+                  #           "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  segs = c("Hirer 21",
+                            "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   # segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  #  segs = c("Hirer 21","Resident ebike owner 21",
+                  #           "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                  # segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike #20"),
+                  segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "I would consider visiting the Lake District without a car\n if public transport were improved\n between my home and the Lake District (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  # segs = c("Hirer 21","Resident ebike owner 21",
+                  #           "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  segs = c("Hirer 21",
+                            "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   # segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  #  segs = c("Hirer 21","Resident ebike owner 21",
+                  #           "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                  # segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike #20"),
+                  segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+
+# Car Restraint
+
+```{r}
+############### restrict access more beautiful ################ 
+```
+
+
+
+
+
+##  Restricting tourist cars and vans in some Lakeland valleys (e.g. Langdale, Borrowdale) would make the Lake District more beautiful
+
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_c"
+opinion.var21  = "Q45_2021_c"
+raw.var20 = "Q43c"
+opinion.var20  = "Q43c"
+ct.opinion.name  = "opinion"
+plot.title = "Restricting tourist cars and vans\n in some Lakeland valleys (e.g. Langdale, Borrowdale)\n would make the Lake District more beautiful
+ (cross section)"
+
+#check <- dat_21 %>% dplyr::select(segment21,Q45_2021_e,Q47_2021)
+
+```
+
+ 
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Hirer 21","Resident ebike owner 21",
+                           "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21",
+                  #          "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                    segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                   #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                    segs = c("Hirer 21","Resident ebike owner 21",
+                             "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                #segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                  segs = 
+                    c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "Restricting tourist cars and vans\n in some Lakeland valleys (e.g. Langdale, Borrowdale)\n would make the Lake District more beautiful (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                             "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                  #segs = c("Hirer 21",
+                   #         "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                    segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  # segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Hirer 21","Resident ebike owner 21",
+                             "Resident non ebike 21","Visitor ebike owner 21","Visitor non ebike 21"),
+                #segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Hirer 20","Resident ebike owner 20", "Resident non ebike 20","Visitor ebike owner 20","Visitor non ebike 20"),
+                  #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+                                                "male_visitor_ebike",
+                                                "male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+
+
+
+
+
+
+```{r}
+############## Restricting tourist cars and vans in some Lakeland valleys (e.g. Langdale, Borrowdale) would be good for the tourism industry #####
+```
+
+##  Restricting tourist cars and vans in some Lakeland valleys (e.g. Langdale, Borrowdale) would be good for the tourism industry
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_g"
+opinion.var21  = "Q45_2021_g"
+raw.var20 = "Q43i"
+opinion.var20  = "Q43i"
+ct.opinion.name  = "opinion"
+plot.title = "Restricting tourist cars and vans in some Lakeland valleys\n (e.g. Langdale, Borrowdale)\n would be good for the tourism industry "
+
+
+```
+ 
+
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                  #segs = c("Hirer 21",
+                  #          "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                    segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                   #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                    segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                #segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                  segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                  #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+#                                                 "male_visitor_ebike",
+#                                                 "male_res_owner","male_res_non_ebike",
+#                                                 "female_res_owner","female_res_non_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "Restricting tourist cars and vans in some Lakeland valleys (e.g. Langdale, Borrowdale) would make the Lake District more beautiful (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                  #segs = c("Hirer 21",
+                   #         "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                    segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                  # segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                #segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                  #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+ 
+
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+###################### car restraint non tourism business ################### 
+```
+
+
+## "Restricting tourist cars and vans in some Lakeland valleys\n (e.g. Langdale, Borrowdale)\n would be good for non-tourist businesses (cross section)"
+
+
+```{r}
+#name stuff
+
+raw.var21 = "Q45_2021_h"
+opinion.var21  = "Q45_2021_h"
+raw.var20 = "Q43j"
+opinion.var20  = "Q43j"
+ct.opinion.name  = "opinion"
+plot.title = "Restricting tourist cars and vans in some Lakeland valleys\n (e.g. Langdale, Borrowdale)\n would be good for non-tourist businesses (cross section)"
+
+
+```
+
+
+
+
+
+
+
+
+## Cross section analysis
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                  segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                  #segs = c("Hirer 21",
+                  #          "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = dat_21 %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                    segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                   #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  dat_20 %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                    segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                #segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = dat_21 %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                  segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                  #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = dat_20 %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt = regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## run analysis on 2020 and 2021 cross section data
+```{r, fig.dim = c(8, 7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+
+
+
+```
+
+
+```{r}
+ 
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+### Compare each segment in 2020 with the same segment in 2021
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike",
+#                                                 "male_visitor_ebike",
+#                                                 "male_res_owner","male_res_non_ebike",
+#                                                 "female_res_owner","female_res_non_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+
+
+
+rt <- regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+
+
+## Run the plot on B(2020) and C(2021) separately to carry out within year comparisons
+
+
+
+## B (2020)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## C (2021)
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## Waves analysis 
+
+```{r}
+plot.title = "Restricting tourist cars and vans in some Lakeland valleys\n (e.g. Langdale, Borrowdale)\n would be good for non-tourist businesses (panel)"
+```
+
+
+```{r}
+a21f <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                  #segs = c("Hirer 21",
+                   #         "Visitor ebike owner 21","Visitor non ebike 21"),
+                  
+                  data_to_use = waves %>% filter(Q47_2021 == "female")
+                  )
+
+a21f$segment <- paste0("Female ",a21f$segment)
+
+
+
+a20f <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                    segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                  # segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use =  waves %>% filter(Q45 == "female")
+                  
+)
+
+a20f$segment <- paste0("Female ",a20f$segment)
+
+a21m <- opiniondf(opinion_var = raw.var21,
+                  raw_var = raw.var21,segment_var = "segment21",
+                   segs = c("Resident ebike owner 21",
+                           "Resident non ebike 21"),
+                #segs = c("Hirer 21", "Visitor ebike owner 21","Visitor non ebike 21"),
+                      data_to_use = waves %>% filter(Q47_2021 == "male")
+                  
+)
+
+a21m$segment <- paste0("Male ",a21m$segment)
+
+a20m <- opiniondf(opinion_var = raw.var20,
+                  raw_var = raw.var20,segment_var = "segment",
+                   segs = c("Resident ebike owner 20",
+                           "Resident non ebike 20"),
+                  #segs = c("Hirer 20", "Visitor ebike owner 20","Visitor non ebike 20"),
+                  data_to_use  = waves %>% filter(Q45 == "male")
+)
+
+a20m$segment <- paste0("Male ",a20m$segment)
+
+#glimpse(a21)
+#glimpse(a20)
+
+a <- rbind(a21f,a20f,a21m,a20m)
+b <- rbind(a20f,a20m)
+c <- rbind(a21f,a21m)
+```
+
+
+
+## run analysis on 2020 and 2021 PANEL data 
+
+
+```{r, warning = FALSE,message=FALSE}
+#net values
+rt <- regulartable(net_agreement(a),cwidth = 1)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+```{r,fig.dim=c(8,7)}
+## make the likert chart
+likert_from_opinion(input_long_df  = a,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = a)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+```{r}
+
+#compare the segment in 2020 with the same segment in 2021
+#adj P value < 0.05 means significant difference between years.  
+# comp2yr <- compare_segs_across_years_lookup(df = a,
+#                                  to_compare = c("female_hirer","male_hirer","female_visitor_ebike","male_visitor_ebike"))
+
+comp2yr <- compare_segs_across_years_lookup(df = a,
+                                 to_compare = c("male_res_owner","male_res_non_ebike",
+                                                "female_res_owner","female_res_non_ebike"))
+ 
+
+
+rt <-regulartable(comp2yr %>% mutate_at(3:3, round, 3),cwidth = 2)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+
+```
+
+
+## wilcoxon paired test on panel data (if table empty non significant)
+```{r}
+### WILCOXON PAIRED TEST ON THE PANEL DATA
+## we run a mann whitney on the cross section data - mann whitney assumes independent not paired data
+## the test does run on the panel data but the test isn't as powerful
+## so we're running this Wilcoxon paired test on the panel data because here we know the data are the same person
+#answering both waves . e.g.  a paired sample
+
+
+wilcox_paired_waves() #defaults are df = waves,#raw_var21 = raw.var21, #raw_var20 = raw.var20
+
+```
+
+## Run within year comparisons on the panel data
+
+## B (2020) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = b,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+
+
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = b)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+## C (2021) PANEL
+```{r}
+## make the likert chart
+likert_from_opinion(input_long_df  = c,
+                           ct_opinion_name = ct.opinion.name,
+                           set_ref_zero =3,
+                           x_axis_percent = TRUE,
+                           plot_title = plot.title)
+ 
+```
+
+```{r}
+## run kruskal wallis 
+ktout <- kruskal_func(input_long_df  = c)
+#print the test result 
+#ktout[1]
+#if the test result is significant then 
+#this post hoc test (Dunn Test) can be used
+#regulartable(as.data.frame(ktout[2]))
+
+kt <- as.data.frame(ktout[2]) %>% dplyr::select(Comparison,P.adj) %>% mutate_at(2:2, round, 3)
+#kt %>% dplyr::select(Comparison,P.adj)
+rt = regulartable(kt,cwidth = 3)
+rt <- fontsize(rt,size = 9,part = "all")
+rt
+```
+
+
+
+
+
